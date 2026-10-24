@@ -199,6 +199,8 @@ function renderLyrics(tr) {
     const lines = lyricLines(tr.lyrics); if (!lines.length) { toast(L.aiNeedLyrics); return; }
     const need = lines.length * 2; if (song.bars < need) { setBars(Math.min(32, Math.ceil(need / 4) * 4)); }
     tr.notes = composeMelody(lines.map((l) => splitText(l).length), song.chords, song.key, song.scale, Date.now());
+    // an instrument that doubles the singer follows the new tune
+    for (const x of song.tracks) if (x.doubles !== undefined && song.tracks.indexOf(tr) === 0) x.notes = tr.notes.map((n) => ({ t: n.t, d: n.d, p: n.p + x.doubles, v: n.v }));
     await assignLyrics(tr); save(); renderEditorTools(); renderTracks(); startPlay();
   };
   renderLyricsInfo(tr);

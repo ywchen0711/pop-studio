@@ -197,7 +197,7 @@ export async function renderWav(song, sylFor) {
   const sp = stepSec(song), secs = song.bars * SPB * sp + 2.5, rate = 44100;
   const ctx = new OfflineAudioContext(2, Math.ceil(secs * rate), rate);
   const bus = buildBus(ctx), buses = song.tracks.map((tr) => trackBus(ctx, bus.master, bus.rev, tr));
-  schedule(ctx, buses, song, 0, song.bars * SPB, 0.05, sylFor);
+  schedule(ctx, buses, song, 0, song.bars * SPB, 0.3, sylFor);
   const buf = await ctx.startRendering();
   return wavBlob(buf);
 }

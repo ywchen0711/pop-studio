@@ -61,7 +61,8 @@ const ONSETS = new Set(['st', 'tr', 'dr', 'br', 'kr', 'pr', 'gr', 'fr', 'pl', 'b
 export function englishSyllables(word) {
   const raw = word.toLowerCase().replace(/[^a-z'-]/g, '').replace(/'/g, '');
   if (!raw) return [];
-  if (raw.includes('-')) return raw.split('-').filter(Boolean).map((p) => ({ ...syll(p), text: p }));
+  // hyphenated parts: "kle" / "tle" sing like "kul", a later part ending in y sings "ee" (ci-ty)
+  if (raw.includes('-')) return raw.split('-').filter(Boolean).map((p, i) => { if (/^[^aeiouy]+le$/.test(p)) return { c: p.slice(0, -2), v: ['uh'], coda: 'l', text: p }; if (i > 0 && /^[^aeiou]*y$/.test(p)) return { c: p.slice(0, -1), v: ['ee'], coda: '', text: p }; return { ...syll(p), text: p }; });
   if (WORDS[raw]) { const [c, v, coda] = WORDS[raw]; return [{ c, v, coda: coda || '', text: raw }]; }
   // spellings that sound like something else
   let w = raw.replace(/tch/g, 'ch').replace(/dge/g, 'j').replace(/ph/g, 'f').replace(/wh/g, 'w').replace(/^kn/, 'n').replace(/^wr/, 'r').replace(/ck/g, 'k').replace(/qu/g, 'kw').replace(/x/g, 'ks').replace(/igh/g, 'I').replace(/gh/g, '');
@@ -153,6 +154,7 @@ function clusterOf(c) { const out = []; let s = c || ''; while (s) { const two =
 
 // sing one syllable on one note: { t start, d length (s), midi, syl, voice, vel }
 export function singNote(ctx, out, n) {
+  const z = (x) => Math.max(0, x);
   const P = VOICES[n.voice] || VOICES.girl, syl = n.syl || { v: ['a'], c: '', coda: '' }, t0 = n.t, d = Math.max(0.12, n.d), f0 = mtof(n.midi + (P.octave || 0) * 12), k = P.fmt;
   const pre = clusterOf(syl.c === 'yglide' || syl.c === 'wglide' ? syl.c[0] : syl.c);
   const preLen = pre.reduce((a, c) => a + (CONS[c] ? CONS[c][3] : 0.05), 0);
@@ -163,8 +165,8 @@ export function singNote(ctx, out, n) {
     if (CONS[c]) {
       const [type, fc, lv, len] = CONS[c], src = noise(ctx), bp = ctx.createBiquadFilter(), g = ctx.createGain();
       bp.type = 'bandpass'; bp.frequency.value = fc * (0.9 + 0.1 * k); bp.Q.value = type === 'burst' ? 1.2 : 2.5;
-      g.gain.setValueAtTime(0, ct); g.gain.linearRampToValueAtTime(lv * (n.vel ?? 0.8), ct + Math.min(0.01, len / 3)); g.gain.setValueAtTime(lv * (n.vel ?? 0.8), ct + len * 0.6); g.gain.linearRampToValueAtTime(0, ct + len);
-      src.connect(bp); bp.connect(g); g.connect(out); src.start(ct); src.stop(ct + len + 0.02);
+      g.gain.setValueAtTime(0, z(ct)); g.gain.linearRampToValueAtTime(lv * (n.vel ?? 0.8), z(ct + Math.min(0.01, len / 3))); g.gain.setValueAtTime(lv * (n.vel ?? 0.8), z(ct + len * 0.6)); g.gain.linearRampToValueAtTime(0, z(ct + len));
+      src.connect(bp); bp.connect(g); g.connect(out); src.start(z(ct)); src.stop(ct + len + 0.02);
       ct += len * 0.8;
     } else ct += 0.03;
   }
@@ -175,18 +177,18 @@ export function singNote(ctx, out, n) {
     if (pw) osc.setPeriodicWave(pw); else osc.type = 'square';
     // pitch: a small scoop up into the note, then vibrato that grows
     const prevF = n.glideFrom ? mtof(n.glideFrom + (P.octave || 0) * 12) : f0 * 0.97;
-    osc.frequency.setValueAtTime(prevF, vStart - 0.02); osc.frequency.exponentialRampToValueAtTime(f0, vStart + 0.06);
+    osc.frequency.setValueAtTime(prevF, z(vStart - 0.02)); osc.frequency.exponentialRampToValueAtTime(f0, z(vStart + 0.06));
     osc.detune.value = det;
-    if (P.vib && d > 0.3) { const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 5.4 + Math.random() * 0.4; lg.gain.setValueAtTime(0, vStart); lg.gain.linearRampToValueAtTime(0, vStart + Math.min(0.25, d * 0.4)); lg.gain.linearRampToValueAtTime(f0 * 0.012 * P.vib * 2.2, vStart + Math.min(0.6, d * 0.8)); lfo.connect(lg); lg.connect(osc.frequency); lfo.start(vStart); lfo.stop(vEnd + 0.2); }
+    if (P.vib && d > 0.3) { const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 5.4 + Math.random() * 0.4; lg.gain.setValueAtTime(0, z(vStart)); lg.gain.linearRampToValueAtTime(0, z(vStart + Math.min(0.25, d * 0.4))); lg.gain.linearRampToValueAtTime(f0 * 0.012 * P.vib * 2.2, z(vStart + Math.min(0.6, d * 0.8))); lfo.connect(lg); lg.connect(osc.frequency); lfo.start(z(vStart)); lfo.stop(vEnd + 0.2); }
     // the mouth: three formant filters in parallel
     const mix = ctx.createGain(), amp = ctx.createGain(), lp = ctx.createBiquadFilter();
     lp.type = 'lowpass'; lp.frequency.value = 5200 * P.bright;
     const F = [0, 1, 2].map((i) => { const bp = ctx.createBiquadFilter(), g = ctx.createGain(); bp.type = 'bandpass'; bp.Q.value = [6, 9, 11][i]; g.gain.value = [1, 0.62, 0.3][i] * (i === 2 ? P.bright : 1); osc.connect(bp); bp.connect(g); g.connect(mix); return bp; });
-    const setV = (name, at, glide = 0.04) => { const f = V[name] || V.a; F.forEach((bp, i) => bp.frequency.setTargetAtTime(f[i] * fk, at, glide)); };
+    const setV = (name, at, glide = 0.04) => { const f = V[name] || V.a; F.forEach((bp, i) => bp.frequency.setTargetAtTime(f[i] * fk, z(at), glide)); };
     // voiced onsets (m, n, l, r, w, y) start in their own shape and slide into the vowel
     const vo = pre.find((c) => VOICED[c]);
     const vowels = syl.v && syl.v.length ? syl.v : ['a'];
-    if (vo) setV(VOICED[vo], ct - 0.06, 0.005); else F.forEach((bp, i) => { const f = V[vowels[0]] || V.a; bp.frequency.setValueAtTime(f[i] * fk, vStart - 0.03); });
+    if (vo) setV(VOICED[vo], ct - 0.06, 0.005); else F.forEach((bp, i) => { const f = V[vowels[0]] || V.a; bp.frequency.setValueAtTime(f[i] * fk, z(vStart - 0.03)); });
     // walk through the vowels: glides are short, the main vowel holds, the last one finishes the syllable
     const coda = syl.coda || '', codaLen = coda ? Math.min(0.12, d * 0.25) : 0, body = d - codaLen;
     const steps = vowels.length, mainIx = steps === 1 ? 0 : steps === 2 ? (['ee', 'oo', 'yu'].includes(vowels[0]) ? 1 : 0) : 1;
@@ -198,20 +200,20 @@ export function singNote(ctx, out, n) {
     else if (/[lr]/.test(coda)) setV(coda.match(/[lr]/)[0], vEnd - codaLen, 0.04);
     // loudness: quick attack, a little swell, release
     const vel = (n.vel ?? 0.8) * (voices > 1 ? 0.55 : 1) * 0.5, endT = vEnd + (nas ? 0.05 : 0.02);
-    amp.gain.setValueAtTime(0, vStart - 0.03); amp.gain.linearRampToValueAtTime(vel * (vo ? 0.6 : 1), vStart + 0.03); amp.gain.linearRampToValueAtTime(vel, vStart + 0.12);
-    if (nas) amp.gain.setTargetAtTime(vel * 0.45, vEnd - codaLen, 0.03);
-    amp.gain.setValueAtTime(nas ? vel * 0.45 : vel, endT - 0.06); amp.gain.linearRampToValueAtTime(0, endT + 0.04);
+    amp.gain.setValueAtTime(0, z(vStart - 0.03)); amp.gain.linearRampToValueAtTime(vel * (vo ? 0.6 : 1), z(vStart + 0.03)); amp.gain.linearRampToValueAtTime(vel, z(vStart + 0.12));
+    if (nas) amp.gain.setTargetAtTime(vel * 0.45, z(vEnd - codaLen), 0.03);
+    amp.gain.setValueAtTime(nas ? vel * 0.45 : vel, z(endT - 0.06)); amp.gain.linearRampToValueAtTime(0, z(endT + 0.04));
     mix.connect(lp); lp.connect(amp); amp.connect(out);
     // a breath of air on top of the voice
-    if (P.breath) { const br = noise(ctx), bf = ctx.createBiquadFilter(), bg = ctx.createGain(); bf.type = 'bandpass'; bf.frequency.value = 2600 * fk; bf.Q.value = 0.8; bg.gain.setValueAtTime(0, vStart); bg.gain.linearRampToValueAtTime(P.breath * vel * 2, vStart + 0.05); bg.gain.linearRampToValueAtTime(0, endT); br.connect(bf); bf.connect(bg); bg.connect(out); br.start(vStart); br.stop(endT + 0.05); }
-    osc.start(vStart - 0.03); osc.stop(endT + 0.08);
+    if (P.breath) { const br = noise(ctx), bf = ctx.createBiquadFilter(), bg = ctx.createGain(); bf.type = 'bandpass'; bf.frequency.value = 2600 * fk; bf.Q.value = 0.8; bg.gain.setValueAtTime(0, z(vStart)); bg.gain.linearRampToValueAtTime(P.breath * vel * 2, z(vStart + 0.05)); bg.gain.linearRampToValueAtTime(0, z(endT)); br.connect(bf); bf.connect(bg); bg.connect(out); br.start(z(vStart)); br.stop(endT + 0.05); }
+    osc.start(z(vStart - 0.03)); osc.stop(endT + 0.08);
   }
   // consonants at the end of the syllable (t, s, k, ...)
   let et = vEnd - 0.02;
   for (const c of clusterOf(syl.coda).filter((x) => CONS[x])) {
     const [, fc, lv, len] = CONS[c], src = noise(ctx), bp = ctx.createBiquadFilter(), g = ctx.createGain();
     bp.type = 'bandpass'; bp.frequency.value = fc; bp.Q.value = 2;
-    g.gain.setValueAtTime(0, et); g.gain.linearRampToValueAtTime(lv * 0.6 * (n.vel ?? 0.8), et + 0.01); g.gain.linearRampToValueAtTime(0, et + len);
-    src.connect(bp); bp.connect(g); g.connect(out); src.start(et); src.stop(et + len + 0.02); et += len * 0.7;
+    g.gain.setValueAtTime(0, z(et)); g.gain.linearRampToValueAtTime(lv * 0.6 * (n.vel ?? 0.8), z(et + 0.01)); g.gain.linearRampToValueAtTime(0, z(et + len));
+    src.connect(bp); bp.connect(g); g.connect(out); src.start(z(et)); src.stop(et + len + 0.02); et += len * 0.7;
   }
 }

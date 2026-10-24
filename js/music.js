@@ -83,8 +83,9 @@ const RHYTHMS = {
 function rnd(seed) { let s = seed >>> 0 || 1; return () => { s = (s + 0x6d2b79f5) >>> 0; let x = s; x = Math.imul(x ^ (x >>> 15), x | 1); x ^= x + Math.imul(x ^ (x >>> 7), x | 61); return ((x ^ (x >>> 14)) >>> 0) / 4294967296; }; }
 export function composeMelody(lines, chords, key, scale, seed = Date.now()) {
   const r = rnd(seed), out = [], sc = SCALES[scale], tonic = PC[key] + 60, pool = [];
-  for (let m = tonic - 5; m <= tonic + 14; m++) if (inScale(m, key, scale)) pool.push(m);
-  let prev = tonic + sc[2];
+  // a comfortable singing range, around the fifth above the key note
+  for (let m = tonic - 1; m <= tonic + 16; m++) if (inScale(m, key, scale)) pool.push(m);
+  let prev = tonic + sc[4];
   lines.forEach((count, li) => {
     if (!count) return;
     const n = Math.min(12, Math.max(4, count)), opts = RHYTHMS[n], rh = opts[Math.floor(r() * opts.length)].slice();
@@ -111,8 +112,8 @@ export function composeMelody(lines, chords, key, scale, seed = Date.now()) {
 const mel = (s) => { const out = []; let t = 0; for (const tok of s.trim().split(/\s+/)) { const [p, d] = tok.split(':'); const dd = +(d || 4); if (p !== 'r') out.push({ t, d: dd, p: nm(p), v: 0.85 }); t += dd; } return out; };
 function song(o) {
   const chords = o.chords, acc = accompany(o.style, chords), bars = chords.length;
-  const tracks = [{ name: ['主唱', 'Lead vocal'], type: 'vocal', voice: o.voice || 'girl', notes: mel(o.melody), lyrics: o.lyrics, vol: 0.9 }, ...acc.map((t) => ({ vol: 0.7, ...t }))];
-  if (o.lead) tracks.splice(1, 0, { name: ['主旋律樂器', 'Melody'], type: 'inst', inst: o.lead, notes: mel(o.melody).map((n) => ({ ...n, p: n.p + (o.leadOct || 0) })), vol: 0.35 });
+  const tracks = [{ name: ['主唱', 'Lead vocal'], type: 'vocal', voice: o.voice || 'girl', notes: mel(o.melody), lyrics: o.lyrics, vol: 0.9 }, ...acc.map((t) => ({ vol: 0.7, ...t, auto: true }))];
+  if (o.lead) tracks.splice(1, 0, { name: ['主旋律樂器', 'Melody'], type: 'inst', inst: o.lead, doubles: o.leadOct || 0, notes: mel(o.melody).map((n) => ({ ...n, p: n.p + (o.leadOct || 0) })), vol: 0.35 });
   return { title: o.title, bpm: o.bpm, key: o.key, scale: o.scale || 'major', bars, chords, style: o.style, tracks, sample: o.id, about: o.about };
 }
 export const SAMPLES = [
@@ -123,7 +124,7 @@ export const SAMPLES = [
   { id: 'drive', title: ['Midnight Drive', 'Midnight Drive'], about: ['原創 · 復古電子', 'Original · synthwave'], make: () => song({ id: 'drive', title: 'Midnight Drive', bpm: 108, key: 'C', scale: 'major', style: 'synthwave', voice: 'boy', lead: 'lead', leadOct: 0,
     chords: ['Am', 'F', 'C', 'G', 'Am', 'F', 'C', 'G'],
     melody: 'A4:2 A4:2 C5:2 A4:2 G4:4 E4:4 F4:16 G4:2 G4:2 A4:2 G4:2 E4:4 D4:4 G4:16 A4:2 C5:2 D5:2 C5:2 A4:4 G4:4 A4:16 E5:2 D5:2 C5:2 C5:2 D5:4 C5:4 B4:16',
-    lyrics: 'Dri-ving through the ci-ty lights, ra-di-o is on we fly, ev-ery heart-beat feels so right, hold on ne-ver say good-bye' }) },
+    lyrics: 'Dri-ving through the cit-y lights, ra-di-o is on we fly, ev-ery heart-beat feels so right, hold on ne-ver say good-bye' }) },
   { id: 'cafe', title: ['下雨的咖啡館', 'Rainy Café'], about: ['原創 · Lo-fi 爵士和弦', 'Original · lo-fi jazz chords'], make: () => song({ id: 'cafe', title: '下雨的咖啡館', bpm: 78, key: 'C', style: 'lofi', voice: 'girl',
     chords: ['Dm7', 'G7', 'Cmaj7', 'Am7', 'Dm7', 'G7', 'Cmaj7', 'Am7'],
     melody: 'r:4 F4:2 A4:2 C5:4 A4:4 B4:4 G4:12 r:4 E4:2 G4:2 B4:4 A4:4 G4:4 E4:12 r:4 D4:2 F4:2 A4:4 C5:4 B4:4 D5:12 r:4 C5:2 B4:2 G4:4 E4:4 D4:4 C4:12',
