@@ -88,6 +88,8 @@ export function composeMelody(lines, chords, key, scale, seed = Date.now()) {
   let prev = tonic + sc[4];
   lines.forEach((count, li) => {
     if (!count) return;
+    // each line starts back up in the singing range (a phrase falls at its end, the next one should not start lower)
+    prev = Math.max(prev, tonic + (li % 2 ? sc[4] : sc[2]));
     const n = Math.min(12, Math.max(4, count)), opts = RHYTHMS[n], rh = opts[Math.floor(r() * opts.length)].slice();
     // longer lines than our rhythms: split the long note; shorter: the phrase starts later
     while (rh.length < count && rh.some((d) => d >= 4)) { const i = rh.findIndex((d) => d >= 4); const h = rh[i] / 2; rh.splice(i, 1, h, h); }
