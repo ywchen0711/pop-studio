@@ -3,6 +3,8 @@
 import { INSTRUMENTS, DRUMS, SPB, audio, ensure, loadInstrument, play, stop, player, position, renderWav, preview } from './sound.js?v=1';
 import { VOICES, syllables, splitText } from './voice.js?v=1';
 import { KEYS, SCALES, PROG_NAMES, STYLES, progression, accompany, composeMelody, SAMPLES, blankSong, noteName, inScale, chord } from './music.js?v=1';
+import { record, humToNotes, beatToHits } from './listen.js?v=1';
+import { drawScore } from './score.js?v=1';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -19,11 +21,23 @@ const TX = {
   zh: { app: '流行歌製作人', play: '播放', stop: '停止', loop: '循環', bpm: 'BPM', key: '調', bars: '小節', samples: '範例歌曲', mine: '我的歌', wav: '匯出 WAV', share: '分享', newSong: '新歌', save: '儲存', tracks: '音軌', addInst: '樂器', addDrums: '鼓組', addVocal: '人聲',
     auto: '🎼 自動伴奏', ai: '🤖 AI 依歌詞作曲', apply: '套用歌詞', lyrics: '歌詞', lyricsPh: '一行一句歌詞。中文一個字唱一個音；英文可以用連字號分音節，例如 twin-kle。用 ~ 讓上一個字拉長。', voice: '歌手', inst: '樂器', len: '音符長度', draw: '✏️ 畫', erase: '🧹 擦', chords: '和弦', style: '曲風', prog: '和弦進行', keep: '保留目前的和弦', make: '產生伴奏', cancel: '取消',
     loading: '正在載入樂器音色…', rendering: '正在混音輸出…', copied: '分享連結已複製！', saved: '已儲存', del: '刪除', open: '打開', sylInfo: (a, b) => `歌詞 ${a} 個字 · 旋律 ${b} 個音`, noteSyl: '這個音唱的字', mute: '靜音', solo: '獨奏', vol: '音量', scale: { major: '大調', minor: '小調' },
-    hint: '在格子上點一下加音符，拖曳移動，拉右邊改長短，右鍵或雙擊刪除。', drumHint: '點格子加鼓聲，再點一次拿掉。', emptyMine: '還沒有儲存的歌', aboutSamples: '原創的流行風格歌曲，和大家都能用的兒歌民謠。（現在的流行金曲有版權，所以不能放進來）', name: '名稱', confirmNew: '確定開新歌？目前的歌會先自動儲存。', title: '歌名', aiNeedLyrics: '先在歌詞框寫幾句歌詞', bars2: (n) => `${n} 小節` },
+    hint: '在格子上點一下加音符，拖曳移動，拉右邊改長短，右鍵或雙擊刪除。', drumHint: '點格子加鼓聲，再點一次拿掉。', emptyMine: '還沒有儲存的歌', aboutSamples: '原創的流行風格歌曲，和大家都能用的兒歌民謠。（現在的流行金曲有版權，所以不能放進來）', name: '名稱', confirmNew: '確定開新歌？目前的歌會先自動儲存。', title: '歌名', aiNeedLyrics: '先在歌詞框寫幾句歌詞', bars2: (n) => `${n} 小節`,
+    hum: '🎙️ 哼唱', beat: '🎙️ 用嘴打鼓', score: '🎼 樂譜', addHum: '哼一段', humT: '🎙️ 哼一段旋律', beatT: '🎙️ 用嘴打鼓',
+    humInfo: '倒數四拍後開始錄。用「嗒、嗒」或「啦」哼，一個音一個音清楚地唱，會變成鋼琴譜。戴耳機效果最好。',
+    beatInfo: '倒數四拍後開始錄。「動」= 大鼓、「恰／嗆」= 小鼓、「次」= 鈸、「次～」拉長 = 開放鈸。會變成鼓譜。',
+    recBars: '錄幾小節', fromBar: '從第幾小節', into: '放到', newPiano: '新的鋼琴音軌', thisTrack: '目前這個音軌', newDrums: '新的鼓組', snapKey: '對齊調性', clickOn: '錄音時打拍子（請戴耳機）',
+    recStart: '● 開始錄音', recStop: '■ 停止', counting: '準備…', recording: '錄音中', listening: '正在聽寫…', heard: (n, b) => b ? `聽到 ${n} 下鼓聲` : `聽到 ${n} 個音`, heardNone: '沒聽到聲音，再試一次（靠近麥克風，大聲一點）',
+    tryIt: '▶ 聽聽看', retake: '↺ 重錄', done: '完成', noMic: '沒辦法使用麥克風。請允許瀏覽器使用麥克風（需要 https）。', humName: '哼的旋律', scoreT: '樂譜', dlSvg: '⬇️ 下載樂譜', print: '🖨️ 列印', scoreFail: '樂譜載入失敗（需要網路）' },
   en: { app: 'Pop Studio', play: 'Play', stop: 'Stop', loop: 'Loop', bpm: 'BPM', key: 'Key', bars: 'Bars', samples: 'Sample songs', mine: 'My songs', wav: 'Export WAV', share: 'Share', newSong: 'New song', save: 'Save', tracks: 'Tracks', addInst: 'Instrument', addDrums: 'Drums', addVocal: 'Vocal',
     auto: '🎼 Auto band', ai: '🤖 AI melody from lyrics', apply: 'Apply lyrics', lyrics: 'Lyrics', lyricsPh: 'One line per phrase. In Chinese each character is one note; in English split syllables with hyphens, like twin-kle. Use ~ to hold the previous syllable.', voice: 'Singer', inst: 'Instrument', len: 'Note length', draw: '✏️ Draw', erase: '🧹 Erase', chords: 'Chords', style: 'Style', prog: 'Progression', keep: 'Keep my chords', make: 'Make the band', cancel: 'Cancel',
     loading: 'Loading instrument sounds…', rendering: 'Mixing down…', copied: 'Share link copied!', saved: 'Saved', del: 'Delete', open: 'Open', sylInfo: (a, b) => `${a} syllables · ${b} notes`, noteSyl: 'Syllable on this note', mute: 'Mute', solo: 'Solo', vol: 'Volume', scale: { major: 'major', minor: 'minor' },
-    hint: 'Click the grid to add a note, drag to move, drag its right edge to resize, right-click or double-click to delete.', drumHint: 'Click a cell to add a hit, again to remove it.', emptyMine: 'No saved songs yet', aboutSamples: 'Original pop-style songs, and nursery songs and folk tunes everyone may use. (Today’s pop hits are copyrighted, so they can’t be included.)', name: 'Name', confirmNew: 'Start a new song? The current one is saved first.', title: 'Song title', aiNeedLyrics: 'Write a few lines of lyrics first', bars2: (n) => `${n} bars` },
+    hint: 'Click the grid to add a note, drag to move, drag its right edge to resize, right-click or double-click to delete.', drumHint: 'Click a cell to add a hit, again to remove it.', emptyMine: 'No saved songs yet', aboutSamples: 'Original pop-style songs, and nursery songs and folk tunes everyone may use. (Today’s pop hits are copyrighted, so they can’t be included.)', name: 'Name', confirmNew: 'Start a new song? The current one is saved first.', title: 'Song title', aiNeedLyrics: 'Write a few lines of lyrics first', bars2: (n) => `${n} bars`,
+    hum: '🎙️ Hum', beat: '🎙️ Beatbox', score: '🎼 Score', addHum: 'Hum a tune', humT: '🎙️ Hum a melody', beatT: '🎙️ Beatbox a beat',
+    humInfo: 'Recording starts after a four-beat count-in. Hum on “da da” or “la”, each note clearly, and it becomes piano notes. Headphones work best.',
+    beatInfo: 'Recording starts after a four-beat count-in. “Boom” = kick, “ka / pah” = snare, “ts” = hi-hat, a long “tsss” = open hat. It becomes a drum part.',
+    recBars: 'Bars to record', fromBar: 'Start at bar', into: 'Put it in', newPiano: 'A new piano track', thisTrack: 'This track', newDrums: 'A new drum track', snapKey: 'Snap to the key', clickOn: 'Metronome while recording (use headphones)',
+    recStart: '● Record', recStop: '■ Stop', counting: 'Get ready…', recording: 'Recording', listening: 'Writing it down…', heard: (n, b) => b ? `Heard ${n} drum hits` : `Heard ${n} notes`, heardNone: 'Didn’t hear anything; try again (closer to the microphone, a bit louder)',
+    tryIt: '▶ Listen', retake: '↺ Retake', done: 'Done', noMic: 'Can’t use the microphone. Allow the browser to use it (it needs https).', humName: 'Hummed tune', scoreT: 'Score', dlSvg: '⬇️ Download score', print: '🖨️ Print', scoreFail: 'Could not load the score (it needs the internet)' },
 };
 const t = () => TX[S.lang];
 const tx = (a) => (Array.isArray(a) ? a[S.lang === 'zh' ? 0 : 1] : a);
@@ -91,7 +105,7 @@ function renderTracks() {
       <div class="th"><span class="ti">${tr.type === 'vocal' ? '🎤' : tr.type === 'drums' ? '🥁' : (INSTRUMENTS[tr.inst] || INSTRUMENTS.piano).icon}</span><b>${esc(tx(tr.name))}</b><small>${tr.type === 'vocal' ? tx(VOICES[tr.voice || 'girl'].n) : tr.type === 'drums' ? '' : tx((INSTRUMENTS[tr.inst] || INSTRUMENTS.piano).n)}</small></div>
       <div class="tc"><button data-m="${i}" class="${tr.mute ? 'on' : ''}" title="${L.mute}">M</button><button data-s="${i}" class="${tr.solo ? 'on' : ''}" title="${L.solo}">S</button><input type="range" data-v="${i}" min="0" max="1" step="0.05" value="${tr.vol ?? 0.8}" title="${L.vol}"><button data-x="${i}" title="${L.del}">✕</button></div>
       <div class="mini">${miniNotes(tr, i)}</div></div>`).join('')}
-    <div class="adds"><button id="aInst">＋🎹 ${L.addInst}</button><button id="aDrums">＋🥁 ${L.addDrums}</button><button id="aVocal">＋🎤 ${L.addVocal}</button></div>
+    <div class="adds"><button id="aInst">＋🎹 ${L.addInst}</button><button id="aDrums">＋🥁 ${L.addDrums}</button><button id="aVocal">＋🎤 ${L.addVocal}</button><button id="aHum">＋🎙️ ${L.addHum}</button></div>
     <button class="big" id="bAuto">${L.auto}</button>`;
   $('tracks').querySelectorAll('.trk').forEach((el) => el.onclick = (e) => { if (e.target.closest('button,input')) return; sel = +el.dataset.i; selNote = null; renderTracks(); renderEditor(); });
   $('tracks').querySelectorAll('[data-m]').forEach((b) => b.onclick = () => { const tr = song.tracks[+b.dataset.m]; tr.mute = !tr.mute; save(); renderTracks(); });
@@ -102,6 +116,7 @@ function renderTracks() {
   $('aDrums').onclick = () => addTrack({ name: ['鼓', 'Drums'], type: 'drums', inst: 'drums', notes: [], vol: 0.7 });
   $('aVocal').onclick = () => addTrack({ name: ['合音', 'Backing vocal'], type: 'vocal', voice: 'choir', notes: [], lyrics: '', vol: 0.6 });
   $('bAuto').onclick = () => autoDialog();
+  $('aHum').onclick = () => micDialog('hum', null);
 }
 function miniNotes(tr, i) {
   const total = song.bars * SPB, lo = tr.type === 'drums' ? 0 : Math.min(...tr.notes.map((n) => n.p), 60), hi = tr.type === 'drums' ? 9 : Math.max(...tr.notes.map((n) => n.p), 72), span = Math.max(1, hi - lo);
@@ -118,12 +133,15 @@ function renderEditor() {
   $('tools').innerHTML = `<input class="tname" id="tName" value="${esc(tx(tr.name))}" style="--c:${trackColor(sel)}">${instSel}
     ${tr.type === 'drums' ? '' : `<label>${L.len}<select id="tLen">${[[1, '1/16'], [2, '1/8'], [4, '1/4'], [8, '1/2'], [16, '1']].map(([v, n]) => `<option value="${v}" ${v === noteLen ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`}
     <span class="seg"><button id="tDraw" class="${tool === 'draw' ? 'on' : ''}">${L.draw}</button><button id="tErase" class="${tool === 'erase' ? 'on' : ''}">${L.erase}</button></span>
+    <button class="btn hot" id="tMic">${tr.type === 'drums' ? L.beat : L.hum}</button><button class="btn" id="tScore">${L.score}</button>
     ${tr.type === 'vocal' && selNote ? `<label>${L.noteSyl}<input id="tSyl" class="syl" value="${esc(selNote.syl ? selNote.syl.text : '')}" maxlength="12"></label>` : ''}
     <small class="hint">${tr.type === 'drums' ? L.drumHint : L.hint}</small>`;
   $('tName').oninput = () => { tr.name = [$('tName').value, $('tName').value]; save(); renderTracks(); };
   if ($('tInst')) $('tInst').onchange = () => { if (tr.type === 'vocal') tr.voice = $('tInst').value; else { tr.inst = $('tInst').value; loadInstrument(tr.inst); preview(tr, 60); } save(); renderTracks(); };
   if ($('tLen')) $('tLen').onchange = () => { noteLen = +$('tLen').value; };
   $('tDraw').onclick = () => { tool = 'draw'; renderEditor(); };
+  $('tMic').onclick = () => micDialog(tr.type === 'drums' ? 'beat' : 'hum', tr);
+  $('tScore').onclick = () => scoreDialog(tr);
   $('tErase').onclick = () => { tool = 'erase'; renderEditor(); };
   if ($('tSyl')) $('tSyl').onchange = async () => { const v = $('tSyl').value.trim(); if (!v) return; const sy = (await syllables(v))[0]; if (sy) { selNote.syl = { text: sy.text, c: sy.c, v: sy.v, coda: sy.coda, manual: true }; save(); drawNotes(); } };
   renderRoll(tr);
@@ -234,6 +252,81 @@ function autoDialog() {
     for (const tr of accompany(st, song.chords.slice(0, song.bars))) song.tracks.push({ ...tr, auto: true, vol: tr.vol ?? 0.7 });
     closeDialog(); save(); render(); startPlay();
   };
+}
+
+// ------------------------------------------------------------------ the microphone: hum a melody, or beatbox a beat, and it is written down
+const BAR_CHOICES = [4, 8, 12, 16, 24, 32];
+function micDialog(mode, tr) {
+  const L = t(), beat = mode === 'beat', cur = tr && (beat ? tr.type === 'drums' : tr.type !== 'drums');
+  const o = Object.assign({ bars: 4, from: Math.floor(playFrom / SPB), into: cur ? 'this' : 'new', snap: true, clicks: !beat }, S.mic && S.mic[mode]);
+  if (!cur) o.into = 'new';
+  dialog(`<h3>${beat ? L.beatT : L.humT}</h3><p class="dim">${beat ? L.beatInfo : L.humInfo}</p>
+    <label>${L.recBars}</label><div class="chips">${[1, 2, 4, 8].map((n) => `<button class="cc ${n === o.bars ? 'on' : ''}" data-rb="${n}">${n}</button>`).join('')}</div>
+    <label>${L.fromBar}</label><div class="chips">${Array.from({ length: Math.min(song.bars, 16) }, (_, i) => `<button class="cc ${i === o.from ? 'on' : ''}" data-fb="${i}">${i + 1}</button>`).join('')}</div>
+    <label>${L.into}</label><div class="chips"><button class="cc ${o.into === 'new' ? 'on' : ''}" data-in="new">${beat ? L.newDrums : L.newPiano}</button>${cur ? `<button class="cc ${o.into === 'this' ? 'on' : ''}" data-in="this">${L.thisTrack} · ${esc(tx(tr.name))}</button>` : ''}</div>
+    ${beat ? '' : `<label class="ck"><input type="checkbox" id="mSnap" ${o.snap ? 'checked' : ''}> ${L.snapKey} (${song.key} ${L.scale[song.scale]})</label>`}
+    <label class="ck"><input type="checkbox" id="mClick" ${o.clicks ? 'checked' : ''}> ${L.clickOn}</label>
+    <div id="mRec" class="rec" hidden><div class="cnt" id="mCnt"></div><div class="dots" id="mDots"></div><div class="lvl"><i id="mLvl"></i></div><div class="live" id="mLive"></div></div>
+    <div class="mrow"><button class="big" id="mGo">${L.recStart}</button></div><div class="mrow" id="mAfter" hidden></div>`);
+  const pickOne = (attr, key, conv) => document.querySelectorAll(`[${attr}]`).forEach((b) => b.onclick = () => { o[key] = conv(b.getAttribute(attr)); document.querySelectorAll(`[${attr}]`).forEach((x) => x.classList.toggle('on', x === b)); });
+  pickOne('data-rb', 'bars', Number); pickOne('data-fb', 'from', Number); pickOne('data-in', 'into', String);
+  let take = null, undo = null;
+  // closing the dialog in the middle of a take stops the microphone
+  $('dlg').addEventListener('close', () => { if (take) take.stop(); }, { once: true });
+  const remember = () => { S.mic = S.mic || {}; S.mic[mode] = { bars: o.bars, into: o.into, snap: o.snap, clicks: o.clicks }; save(); };
+  $('mGo').onclick = async () => {
+    if (take) { take.stop(); return; }
+    o.snap = $('mSnap') ? $('mSnap').checked : false; o.clicks = $('mClick').checked; remember();
+    if (undo) { undo(); undo = null; }
+    // room in the song for the take
+    const need = o.from + o.bars; if (need > song.bars) setBars(BAR_CHOICES.find((n) => n >= need) || 32);
+    stopPlay(true);
+    $('mRec').hidden = false; $('mAfter').hidden = true; $('mGo').textContent = L.recStop; $('mCnt').textContent = L.counting;
+    $('mDots').innerHTML = Array.from({ length: o.bars * 4 }, (_, i) => `<i class="${i % 4 === 0 ? 'b' : ''}"></i>`).join('');
+    take = record({ bars: o.bars, bpm: song.bpm, clicks: o.clicks,
+      onBeat: (n, of, counting) => { if (!$('mCnt')) return; $('mCnt').textContent = counting ? n : L.recording; $('mCnt').classList.toggle('go', !counting); if (!counting) { const d = $('mDots').children[n - 1]; if (d) d.classList.add('on'); } },
+      onLevel: (rms, midi) => { if (!$('mLvl')) return; $('mLvl').style.width = Math.min(100, rms * 600) + '%'; if (!beat) $('mLive').textContent = midi ? '♪ ' + noteName(Math.round(midi)) : ''; } });
+    try { await take.started; } catch (e) { take = null; $('mRec').hidden = true; $('mGo').textContent = L.recStart; toast(L.noMic); return; }
+    const { pcm, rate } = await take.result; take = null;
+    $('mGo').textContent = L.recStart; $('mCnt').textContent = L.listening; $('mCnt').classList.remove('go');
+    await new Promise((r) => setTimeout(r, 30));
+    const notes = beat ? beatToHits(pcm, rate, { bpm: song.bpm, bars: o.bars }) : humToNotes(pcm, rate, { bpm: song.bpm, bars: o.bars, key: song.key, scale: song.scale, snap: o.snap });
+    if (!notes.length) { $('mCnt').textContent = L.heardNone; return; }
+    // write it into the song: into this track (replacing what was in those bars) or a new one
+    const off = o.from * SPB, placed = notes.map((n) => ({ ...n, t: n.t + off }));
+    let target;
+    if (o.into === 'this' && tr) {
+      target = tr; const before = clone(tr.notes);
+      tr.notes = tr.notes.filter((n) => n.t < off || n.t >= off + o.bars * SPB).concat(placed);
+      undo = () => { target.notes = before; };
+    } else {
+      target = beat ? { name: ['鼓', 'Drums'], type: 'drums', inst: 'drums', notes: placed, vol: 0.75 } : { name: [TX.zh.humName, TX.en.humName], type: 'inst', inst: 'piano', notes: placed, vol: 0.8 };
+      song.tracks.push(target); const ix = song.tracks.length - 1;
+      undo = () => { const k = song.tracks.indexOf(target); if (k >= 0) song.tracks.splice(k, 1); sel = Math.min(sel, song.tracks.length - 1); };
+      sel = ix;
+    }
+    save(); renderTracks(); renderEditorTools();
+    $('mCnt').textContent = L.heard(notes.length, beat);
+    $('mAfter').hidden = false;
+    $('mAfter').innerHTML = `<button class="btn" id="mPlay">${L.tryIt}</button><button class="btn" id="mScore">${L.score}</button><button class="btn" id="mRe">${L.retake}</button><span class="sp"></span><button class="btn hot" id="mDone">${L.done}</button>`;
+    $('mPlay').onclick = () => { playFrom = off; startPlay(); };
+    $('mScore').onclick = () => scoreDialog(target);
+    $('mRe').onclick = () => { if (undo) { undo(); undo = null; save(); renderTracks(); renderEditorTools(); } $('mGo').click(); };
+    $('mDone').onclick = () => { closeDialog(); playFrom = off; drawHead(playFrom); };
+  };
+}
+// sheet music for a track
+async function scoreDialog(tr) {
+  const L = t();
+  dialog(`<h3>${L.scoreT} · ${esc(tx(tr.name))} <small class="dim">${song.key} ${L.scale[song.scale]} · ${song.bpm} BPM</small></h3><div class="score" id="scBox"></div>
+    <div class="mrow"><button class="btn" id="scDl">${L.dlSvg}</button><button class="btn" id="scPr">${L.print}</button></div>`);
+  $('dlg').classList.add('wide');
+  $('dlg').addEventListener('close', () => $('dlg').classList.remove('wide'), { once: true });
+  let svg = null;
+  try { svg = await drawScore($('scBox'), song, tr, S.lang); } catch (e) { $('scBox').innerHTML = `<p style="color:#333">${L.scoreFail}</p>`; return; }
+  const text = () => '<?xml version="1.0" encoding="UTF-8"?>' + new XMLSerializer().serializeToString(svg).replace('<svg ', '<svg style="background:#fff" ');
+  $('scDl').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text()], { type: 'image/svg+xml' })); a.download = `${song.title || 'song'} - ${tx(tr.name)}.svg`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
+  $('scPr').onclick = () => { const w = window.open('', '_blank'); if (!w) return; w.document.write(`<title>${esc(song.title)}</title><h2 style="font-family:sans-serif">${esc(song.title)} · ${esc(tx(tr.name))}</h2>${new XMLSerializer().serializeToString(svg)}`); w.document.close(); w.focus(); w.print(); };
 }
 
 // ------------------------------------------------------------------ playing
